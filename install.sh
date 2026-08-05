@@ -14,7 +14,7 @@ DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}"
 BACKUP_ROOT="${XDG_STATE_HOME:-$HOME/.local/state}/gruvbox-console-hypr/backups"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 USE_GUI=0
-SCALE='1'
+SCALE='auto'
 DO_PACKAGES=1
 DO_LINKS=1
 DO_FONTS=1
@@ -40,7 +40,9 @@ Usage: ./install.sh [options]
 
 Options:
   --gui              Use Zenity dialogs when available
-  --scale SCALE      Hyprland integer scale (default: 1; allowed: 1, 2, 3)
+  --scale SCALE      Monitor scale: 'auto' (default) or integer 1/2/3. Auto keeps
+                     the fractional scale and fixes oversized Chromium/Electron/
+                     Firefox chrome via the XWayland force_zero_scaling fix.
   --no-packages      Do not enable COPR or install RPM packages
   --no-links         Do not link configuration files
   --no-fonts         Do not link fonts or refresh fontconfig cache
@@ -122,8 +124,9 @@ apply_hyprland_tweaks() {
     local conf="$REPO_DIR/hypr/hyprland.conf" tmp
     tmp="$(mktemp)"
 
-    # Replace the first active generic monitor line. Integer scale 1 avoids the
-    # fractional-scale client-size issue observed with Chromium/Electron/Firefox.
+    # Keep the monitor on the fractional 'auto' scale so the whole UI is sized
+    # natively. Oversized Chromium/Electron/Firefox chrome at fractional scale is
+    # fixed below via XWayland + force_zero_scaling, not by forcing integer scale.
     awk -v scale="$SCALE" '
         BEGIN { changed=0 }
         /^[[:space:]]*monitor[[:space:]]*=/ && !changed {
@@ -135,6 +138,22 @@ apply_hyprland_tweaks() {
         END { if (!changed) print "monitor=,preferred,auto," scale }
     ' "$conf" >"$tmp"
     mv -- "$tmp" "$conf"
+
+    # Chromium/Electron/Firefox round a fractional monitor scale up to the next
+    # integer for their own chrome and render oversized. Forcing them onto XWayland
+    # with force_zero_scaling lets Hyprland upscale them to the fractional scale.
+    if ! grep -qE '^[[:space:]]*force_zero_scaling[[:space:]]*=' "$conf"; then
+        cat >>"$conf" <<'EOF'
+
+# Installer-managed: force Chromium/Electron/Firefox onto XWayland so their
+# chrome matches the fractional monitor scale instead of rounding up to 2x.
+env = MOZ_ENABLE_WAYLAND,0
+
+xwayland {
+    force_zero_scaling = true
+}
+EOF
+    fi
 
     if ! grep -qE '^[[:space:]]*touchpad[[:space:]]*\{' "$conf"; then
         cat >>"$conf" <<'EOF'
@@ -174,7 +193,7 @@ bind = SUPER SHIFT, 9, movetoworkspace, 9
 bind = SUPER SHIFT, 0, movetoworkspace, 10
 EOF
     fi
-    ok "Applied integer scale $SCALE, natural touchpad scrolling, and workspace bindings"
+    ok "Applied scale $SCALE with XWayland fractional-scaling fix, natural touchpad scrolling, and workspace bindings"
 }
 
 link_configs() {
@@ -207,8 +226,8 @@ reload_hyprland() {
 terminal_choices() {
     printf '\n%s\n' "$APP_NAME"
     printf '%s\n' 'This installs a separate Hyprland session and preserves Plasma.'
-    read -r -p 'Use integer display scale 1 (recommended) or 2? [1]: ' answer
-    SCALE=${answer:-1}
+    read -r -p 'Monitor scale: auto (default; keeps fractional scale + XWayland fix) or integer 1/2? [auto]: ' answer
+    SCALE=${answer:-auto}
 }
 
 gui_choices() {
@@ -227,8 +246,8 @@ gui_choices() {
     [[ $picked == *Fonts* ]] && DO_FONTS=1
     [[ $picked == *Tweaks* ]] && DO_SESSION_TWEAKS=1
     SCALE=$(zenity --list --radiolist --title="$APP_NAME" \
-        --text='Display scale. Scale 1 avoids oversized Chromium, Electron, and Firefox chrome on fractional-scaled displays.' \
-        --column='Use' --column='Scale' TRUE '1 (recommended)' FALSE '2' \
+        --text='Monitor scale. Auto keeps the fractional scale and fixes oversized Chromium, Electron, and Firefox chrome with the XWayland fix.' \
+        --column='Use' --column='Scale' TRUE 'auto (recommended)' FALSE '1' FALSE '2' \
         --width=700 --height=260) || exit 0
     SCALE=${SCALE%% *}
     zenity --question --title="$APP_NAME" \
@@ -249,7 +268,7 @@ while (($#)); do
     shift
 done
 
-[[ $SCALE =~ ^[123]$ ]] || die "--scale must be an integer: 1, 2, or 3"
+[[ $SCALE == auto || $SCALE =~ ^[123]$ ]] || die "--scale must be 'auto' or an integer 1, 2, or 3"
 require_repo_layout
 is_fedora || die "Unsupported distribution. This installer is designed and tested for Fedora."
 
