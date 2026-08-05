@@ -42,7 +42,7 @@
     "bar": {
         "autoHideDelay": 500,
         "autoShowDelay": 150,
-        "backgroundOpacity": 0.93,
+        "backgroundOpacity": 1,
         "barType": "simple",
         "capsuleColorKey": "none",
         "capsuleOpacity": 1,
@@ -51,7 +51,7 @@
         "displayMode": "always_visible",
         "enableExclusionZoneInset": true,
         "fontScale": 1,
-        "frameRadius": 12,
+        "frameRadius": 0,
         "frameThickness": 8,
         "hideOnOverview": false,
         "marginHorizontal": 4,
@@ -63,7 +63,7 @@
         ],
         "mouseWheelAction": "none",
         "mouseWheelWrap": true,
-        "outerCorners": true,
+        "outerCorners": false,
         "position": "top",
         "reverseScroll": false,
         "rightClickAction": "controlCenter",
@@ -73,7 +73,7 @@
         ],
         "showCapsule": true,
         "showOnWorkspaceSwitch": true,
-        "showOutline": false,
+        "showOutline": true,
         "useSeparateOpacity": false,
         "widgetSpacing": 6,
         "widgets": {
@@ -255,7 +255,7 @@
         "manualSunrise": "06:30",
         "manualSunset": "18:30",
         "monitorForColors": "",
-        "predefinedScheme": "Noctalia (default)",
+        "predefinedScheme": "Gruvbox-Console",
         "schedulingMode": "off",
         "syncGsettings": true,
         "useWallpaperColors": false
@@ -368,17 +368,17 @@
         "animationSpeed": 1,
         "autoStartAuth": false,
         "avatarImage": "/home/carp/.face",
-        "boxRadiusRatio": 1,
+        "boxRadiusRatio": 0,
         "clockFormat": "hh\\nmm",
         "clockStyle": "custom",
         "compactLockScreen": false,
         "dimmerOpacity": 0.2,
-        "enableBlurBehind": true,
+        "enableBlurBehind": false,
         "enableLockScreenCountdown": true,
         "enableLockScreenMediaControls": false,
-        "enableShadows": true,
+        "enableShadows": false,
         "forceBlackScreenCorners": false,
-        "iRadiusRatio": 1,
+        "iRadiusRatio": 0,
         "keybinds": {
             "keyDown": [
                 "Down"
@@ -412,10 +412,10 @@
         ],
         "lockScreenTint": 0,
         "passwordChars": false,
-        "radiusRatio": 1,
-        "reverseScroll": false,
+        "radiusRatio": 0,
+        "reverseScroll": true,
         "scaleRatio": 1,
-        "screenRadiusRatio": 1,
+        "screenRadiusRatio": 0,
         "shadowDirection": "bottom_right",
         "shadowOffsetX": 2,
         "shadowOffsetY": 3,
@@ -550,38 +550,59 @@
         "powerOptions": [
             {
                 "action": "lock",
+                "command": "",
+                "countdownEnabled": true,
                 "enabled": true,
                 "keybind": "1"
             },
             {
                 "action": "suspend",
+                "command": "",
+                "countdownEnabled": true,
                 "enabled": true,
                 "keybind": "2"
             },
             {
                 "action": "hibernate",
+                "command": "",
+                "countdownEnabled": true,
                 "enabled": true,
                 "keybind": "3"
             },
             {
                 "action": "reboot",
+                "command": "",
+                "countdownEnabled": true,
                 "enabled": true,
                 "keybind": "4"
             },
             {
                 "action": "logout",
+                "command": "",
+                "countdownEnabled": true,
                 "enabled": true,
                 "keybind": "5"
             },
             {
                 "action": "shutdown",
+                "command": "",
+                "countdownEnabled": true,
                 "enabled": true,
                 "keybind": "6"
             },
             {
                 "action": "rebootToUefi",
+                "command": "",
+                "countdownEnabled": true,
                 "enabled": true,
                 "keybind": "7"
+            },
+            {
+                "action": "userspaceReboot",
+                "command": "",
+                "countdownEnabled": true,
+                "enabled": false,
+                "keybind": ""
             }
         ],
         "showHeader": true,
@@ -617,12 +638,12 @@
         "enableUserTheming": false
     },
     "ui": {
-        "boxBorderEnabled": false,
-        "fontDefault": "Sans Serif",
+        "boxBorderEnabled": true,
+        "fontDefault": "IosevkaTerm Nerd Font Mono",
         "fontDefaultScale": 1,
-        "fontFixed": "monospace",
+        "fontFixed": "IosevkaTerm Nerd Font Mono",
         "fontFixedScale": 1,
-        "panelBackgroundOpacity": 0.93,
+        "panelBackgroundOpacity": 1,
         "panelsAttachedToBar": true,
         "scrollbarAlwaysVisible": true,
         "settingsPanelMode": "attached",

@@ -8,10 +8,9 @@ state).
 
 ## Status
 
-Phase 2 done: Hyprland boots as a second session, Noctalia shell renders
-(bar, wallpaper layer, dock, notifications) with default/unstyled config.
-Remaining phases: palette/typography, GTK/Qt/cursor coherence, wallpaper,
-install.sh, final docs.
+Phase 3 done: Gruvbox palette + monospace console typography applied across
+Hyprland, Noctalia, and the terminal. Remaining phases: GTK/Qt/cursor
+coherence, wallpaper, install.sh, final docs.
 
 - `hypr/` — Hyprland config
 - `noctalia/` — Noctalia shell config (`~/.config/noctalia`)
@@ -51,6 +50,42 @@ install.sh, final docs.
 - `~/.local/state/noctalia/` — caches, plugin git checkouts, usage stats.
   Deliberately **not** brought into the repo (runtime state, not config;
   includes nested git repos that would be messy to track).
+
+## Palette & typography (Phase 3)
+
+- **Color scheme:** Noctalia ships a stock `Gruvbox` preset
+  (`/etc/xdg/quickshell/noctalia-shell/Assets/ColorScheme/Gruvbox/Gruvbox.json`)
+  with correct canonical hex values, but it maps primary=green /
+  secondary=yellow — backwards from this rice's brief (yellow/orange primary
+  accent, aqua/green secondary). Rather than editing the package-owned file,
+  added a custom scheme at `noctalia/colorschemes/Gruvbox-Console/Gruvbox-Console.json`
+  (scanned automatically from `~/.config/noctalia/colorschemes/`) with the
+  same canonical hex values but primary/secondary swapped, and selected it via
+  `colorSchemes.predefinedScheme` in `settings.json`.
+- **Hyprland borders:** `general.col.active_border` = bright yellow
+  `#fabd2f`, `col.inactive_border` = `#504945` (bg2) in `hypr/hyprland.conf`.
+- **Flat/no-blur/no-shadow:** in `noctalia/settings.json`, zeroed
+  `general.{boxRadiusRatio,iRadiusRatio,radiusRatio,screenRadiusRatio}` and
+  `bar.frameRadius`, disabled `bar.outerCorners`,
+  `general.{enableBlurBehind,enableShadows}`; enabled `bar.showOutline` and
+  `ui.boxBorderEnabled` for hard 1px borders instead. Set
+  `bar.backgroundOpacity`/`ui.panelBackgroundOpacity` to `1` (fully opaque,
+  no glass look).
+- **Typography:** downloaded **IosevkaTerm Nerd Font Mono** (Regular/Bold/
+  Italic/BoldItalic only, from the official
+  [nerd-fonts](https://github.com/ryanoasis/nerd-fonts) v3.5.0 release —
+  the `...Mono` variant so nerd-font glyph icons stay fixed-width and align
+  in the bar/terminal) into `fonts/IosevkaTermNerdFontMono/`, symlinked into
+  `~/.local/share/fonts/`. Not packaged in Fedora's repos or any enabled
+  COPR (`dnf search iosevka`/`nerd-fonts` returned nothing). Set as both
+  `ui.fontDefault` and `ui.fontFixed` in Noctalia's settings (monospace
+  everywhere, not just the terminal).
+- **Terminal:** `kitty` (already installed as a Hyprland dependency) themed
+  via `kitty +kitten themes --dump-theme "Gruvbox Dark"` — the actual
+  upstream [gruvbox-community/gruvbox-contrib](https://github.com/gruvbox-community/gruvbox-contrib)
+  kitty config, saved as `kitty/gruvbox-dark.conf` and included from
+  `kitty/kitty.conf`, which also sets the Iosevka Term Mono font family and
+  a block cursor.
 
 ## Prerequisites
 
