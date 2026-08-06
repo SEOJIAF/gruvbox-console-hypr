@@ -19,13 +19,18 @@ GTK/Qt/cursor coherence, wallpaper, final docs.
 - `fontconfig/`, `fonts/` — monospace console fonts
 - `wallpaper/` — flat Gruvbox wallpaper
 - `applications/` — Hyprland session `.desktop` entry (if not already provided by the package)
-- `install.sh` — idempotent Fedora installer: enables the COPR if needed,
-  installs packages via `dnf`, symlinks configs with timestamped backups of
-  anything pre-existing, links fonts + refreshes fontconfig, and applies the
-  session tweaks below to a fresh clone's `hypr/hyprland.conf`. Supports
-  `--gui` (Zenity dialogs), `--scale auto|1|2|3`, and `--no-packages`/
-  `--no-links`/`--no-fonts`/`--no-tweaks` to skip steps. Never touches
-  Plasma packages, the display manager, or Firefox's profile.
+- `install.sh` — idempotent Fedora installer with a **terminal TUI wizard**
+  (whiptail) as the default when run interactively: welcome screen →
+  checklist of components → monitor-scale choice → confirmation → a
+  progress gauge that runs everything, full log kept in `/tmp`. Enables the
+  COPR if needed, installs packages via `dnf`, symlinks configs with
+  timestamped backups of anything pre-existing, links fonts + refreshes
+  fontconfig, and applies the session tweaks below to a fresh clone's
+  `hypr/hyprland.conf`. `--gui` swaps the TUI for Zenity dialogs; any of
+  `--scale auto|1|2|3` / `--no-packages` / `--no-links` / `--no-fonts` /
+  `--no-tweaks` / `--batch` skips the wizard and runs non-interactively.
+  Never touches Plasma packages, the display manager, or Firefox's profile.
+  (`./install.sh --help` for the full flag list.)
 
 ## Packages / COPRs installed so far
 

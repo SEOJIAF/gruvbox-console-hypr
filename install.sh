@@ -3,6 +3,10 @@
 # Run from the root of this dotfiles repository: ./install.sh
 # It installs Hyprland/Noctalia alongside Plasma; it never removes Plasma packages
 # and never changes the display manager or the default login-session selection.
+#
+# Interactive by default: walks through a terminal TUI (whiptail) wizard. Pass
+# any of --no-packages/--no-links/--no-fonts/--no-tweaks/--scale/--batch to
+# skip the wizard and run non-interactively (e.g. from another script).
 
 set -Eeuo pipefail
 IFS=$'\n\t'
@@ -13,22 +17,42 @@ CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}"
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}"
 BACKUP_ROOT="${XDG_STATE_HOME:-$HOME/.local/state}/gruvbox-console-hypr/backups"
 STAMP="$(date +%Y%m%d-%H%M%S)"
-USE_GUI=0
+LOG_FILE="${TMPDIR:-/tmp}/gruvbox-console-hypr-install-$STAMP.log"
+
+UI_MODE=''          # tui | gui | batch — decided after argument parsing
+TUI_ACTIVE=0         # 1 while a whiptail --gauge owns the terminal
+EXPLICIT_FLAGS=0     # set when a granular --no-* / --scale flag is passed
+ASSUME_YES=0
 SCALE='auto'
 DO_PACKAGES=1
 DO_LINKS=1
 DO_FONTS=1
 DO_SESSION_TWEAKS=1
+SUDO_KEEPALIVE_PID=''
 
-log()  { printf '\033[1;33m==>\033[0m %s\n' "$*"; }
-ok()   { printf '\033[1;32m OK\033[0m %s\n' "$*"; }
-warn() { printf '\033[1;31mWARN\033[0m %s\n' "$*" >&2; }
+log()  { printf '\033[1;33m==>\033[0m %s\n' "$*" | tee -a "$LOG_FILE" >&2; }
+ok()   { printf '\033[1;32m OK\033[0m %s\n' "$*" | tee -a "$LOG_FILE" >&2; }
+warn() { printf '\033[1;31mWARN\033[0m %s\n' "$*" | tee -a "$LOG_FILE" >&2; }
 die()  { warn "$*"; exit 1; }
+
+# Run a command, always capturing full output to $LOG_FILE. Streams it live to
+# the terminal too, unless a whiptail gauge currently owns the screen.
+run_step() {
+    printf '\n[%s] $ %s\n' "$(date +%H:%M:%S)" "$*" >>"$LOG_FILE"
+    if (( TUI_ACTIVE )); then
+        "$@" >>"$LOG_FILE" 2>&1
+    else
+        "$@" 2>&1 | tee -a "$LOG_FILE"
+    fi
+}
 
 cleanup() {
     local rc=$?
+    [[ -n $SUDO_KEEPALIVE_PID ]] && kill "$SUDO_KEEPALIVE_PID" 2>/dev/null
     if (( rc != 0 )); then
-        warn "Installer stopped at line $1 (exit $rc). Existing backups, if any: $BACKUP_ROOT/$STAMP"
+        warn "Installer stopped at line $1 (exit $rc)."
+        warn "Full log: $LOG_FILE"
+        [[ -d "$BACKUP_ROOT/$STAMP" ]] && warn "Backups made so far: $BACKUP_ROOT/$STAMP"
     fi
     exit "$rc"
 }
@@ -38,19 +62,28 @@ usage() {
     cat <<EOF
 Usage: ./install.sh [options]
 
+With no options, and when run from an interactive terminal, this walks
+through a whiptail-based TUI wizard. Any of the flags below skip the wizard
+and run non-interactively instead.
+
 Options:
-  --gui              Use Zenity dialogs when available
-  --scale SCALE      Monitor scale: 'auto' (default) or integer 1/2/3. Auto keeps
-                     the fractional scale and fixes oversized Chromium/Electron/
-                     Firefox chrome via the XWayland force_zero_scaling fix.
+  --tui              Force the terminal TUI wizard (whiptail)
+  --gui              Force Zenity graphical dialogs instead of the TUI
+  --batch, --yes     Skip all prompts; run with current flag values
+  --scale SCALE      Monitor scale: 'auto' (default) or integer 1/2/3. Auto
+                     keeps the fractional scale and fixes oversized Chromium/
+                     Electron/Firefox chrome via the XWayland force_zero_scaling
+                     fix instead of shrinking/growing the whole UI.
   --no-packages      Do not enable COPR or install RPM packages
   --no-links         Do not link configuration files
   --no-fonts         Do not link fonts or refresh fontconfig cache
   --no-tweaks        Do not apply scale/touchpad/workspace settings to hyprland.conf
+  --log-file PATH    Write the install log somewhere other than /tmp
   --help             Show this help
 
 This installer is intentionally Fedora-specific. It maintains KDE Plasma as a
-separate login-session option and does not store, request, or embed sudo passwords.
+separate login-session option and does not store, request, or embed sudo
+passwords — sudo prompts for its own password interactively as needed.
 EOF
 }
 
@@ -64,7 +97,7 @@ have() { command -v "$1" >/dev/null 2>&1; }
 
 backup_path() {
     local target=$1 rel
-    rel="${target#$HOME/}"
+    rel="${target#"$HOME"/}"
     mkdir -p "$BACKUP_ROOT/$STAMP/$(dirname -- "$rel")"
     printf '%s\n' "$BACKUP_ROOT/$STAMP/$rel"
 }
@@ -95,25 +128,24 @@ is_fedora() {
 
 install_packages() {
     have dnf || die "dnf is required; this installer currently supports Fedora only."
-    log "Checking sudo access (your password is handled only by sudo)"
-    sudo -v
 
     # The Hyprland COPR used by this rice also provides Noctalia/Noctalia QS.
     # Do not enable it if the requested package is already available.
     if ! dnf -q repoquery --available hyprland >/dev/null 2>&1; then
         log "Enabling COPR lionheartp/Hyprland"
-        sudo dnf -y copr enable lionheartp/Hyprland
+        run_step sudo dnf -y copr enable lionheartp/Hyprland
     else
         ok "A Hyprland package source is already enabled"
     fi
 
-    log "Installing Hyprland, portal integration, Noctalia, Kitty and Zenity"
-    sudo dnf install -y \
+    log "Installing Hyprland, portal integration, Noctalia, Kitty, and helpers"
+    run_step sudo dnf install -y \
         hyprland \
         xdg-desktop-portal-hyprland \
         qt5-qtwayland \
         noctalia-shell \
         kitty \
+        newt \
         zenity
     ok "Packages installed"
 }
@@ -148,6 +180,7 @@ apply_hyprland_tweaks() {
 # Installer-managed: force Chromium/Electron/Firefox onto XWayland so their
 # chrome matches the fractional monitor scale instead of rounding up to 2x.
 env = MOZ_ENABLE_WAYLAND,0
+env = ELECTRON_OZONE_PLATFORM_HINT,x11
 
 xwayland {
     force_zero_scaling = true
@@ -193,7 +226,15 @@ bind = SUPER SHIFT, 9, movetoworkspace, 9
 bind = SUPER SHIFT, 0, movetoworkspace, 10
 EOF
     fi
-    ok "Applied scale $SCALE with XWayland fractional-scaling fix, natural touchpad scrolling, and workspace bindings"
+
+    if ! grep -q 'launcher toggle' "$conf"; then
+        cat >>"$conf" <<'EOF'
+
+# Noctalia launcher
+bind = SUPER, R, exec, qs ipc -c noctalia-shell call launcher toggle
+EOF
+    fi
+    ok "Applied scale $SCALE with XWayland fractional-scaling fix, natural touchpad scrolling, workspace bindings, and launcher keybind"
 }
 
 link_configs() {
@@ -211,34 +252,146 @@ install_fonts() {
         return
     fi
     link_path "$font_source" "$DATA_DIR/fonts/IosevkaTermNerdFontMono"
-    have fc-cache && fc-cache -f "$DATA_DIR/fonts" || warn "fc-cache is unavailable; log out/in or run fc-cache manually."
-    ok "Font cache refreshed"
+    if have fc-cache; then
+        run_step fc-cache -f "$DATA_DIR/fonts"
+        ok "Font cache refreshed"
+    else
+        warn "fc-cache is unavailable; log out/in or run fc-cache manually."
+    fi
 }
 
 reload_hyprland() {
-    if [[ ${HYPRLAND_INSTANCE_SIGNATURE:-} && -n ${WAYLAND_DISPLAY:-} ]] && have hyprctl; then
-        hyprctl reload >/dev/null && ok "Hyprland configuration reloaded" || warn "Could not hot-reload Hyprland; log out and back in."
+    if [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} && -n ${WAYLAND_DISPLAY:-} ]] && have hyprctl; then
+        if hyprctl reload >/dev/null; then
+            ok "Hyprland configuration reloaded"
+        else
+            warn "Could not hot-reload Hyprland; log out and back in."
+        fi
+        warn "env vars (scale/XWayland fixes) only apply at Hyprland's own startup — log out and back in to fully apply those."
     else
         warn "Not running inside Hyprland; select Hyprland from the display manager after installation."
     fi
 }
 
-terminal_choices() {
-    printf '\n%s\n' "$APP_NAME"
-    printf '%s\n' 'This installs a separate Hyprland session and preserves Plasma.'
-    read -r -p 'Monitor scale: auto (default; keeps fractional scale + XWayland fix) or integer 1/2? [auto]: ' answer
-    SCALE=${answer:-auto}
+# ---------------------------------------------------------------------------
+# UI: three ways to gather the same DO_PACKAGES/DO_LINKS/DO_FONTS/
+# DO_SESSION_TWEAKS/SCALE choices — TUI (default), GUI (--gui), or none
+# (--batch / explicit flags / non-interactive shell).
+# ---------------------------------------------------------------------------
+
+ensure_whiptail() {
+    have whiptail && return 0
+    log "whiptail (from the 'newt' package) is needed for the TUI wizard; installing it"
+    if have dnf && sudo -v 2>/dev/null; then
+        run_step sudo dnf install -y newt && have whiptail && return 0
+    fi
+    return 1
 }
 
+tui_choices() {
+    whiptail --title "$APP_NAME" --msgbox \
+"This installs Hyprland + Noctalia as a SECOND login-session option on Fedora, alongside your existing KDE Plasma session.
+
+Plasma's packages, config, and your display manager's settings are never touched. Any pre-existing file this installer would overwrite is backed up first, under:
+$BACKUP_ROOT/$STAMP
+
+Press Enter to continue." 16 76
+
+    local components
+    components=$(whiptail --title "$APP_NAME" --checklist \
+        "Choose what to install/apply (Space to toggle, Enter to confirm):" 16 76 4 \
+        packages "Hyprland, Noctalia, Kitty, dependencies (dnf/COPR)" ON \
+        links    "Symlink configs into ~/.config (backs up existing files)" ON \
+        fonts    "Link IosevkaTerm Nerd Font Mono + refresh font cache" ON \
+        tweaks   "Scale fix, natural touchpad scroll, workspaces 1-10" ON \
+        3>&1 1>&2 2>&3) || { warn "Cancelled."; exit 0; }
+
+    DO_PACKAGES=0; DO_LINKS=0; DO_FONTS=0; DO_SESSION_TWEAKS=0
+    [[ $components == *packages* ]] && DO_PACKAGES=1
+    [[ $components == *links* ]] && DO_LINKS=1
+    [[ $components == *fonts* ]] && DO_FONTS=1
+    [[ $components == *tweaks* ]] && DO_SESSION_TWEAKS=1
+
+    if (( DO_SESSION_TWEAKS )); then
+        SCALE=$(whiptail --title "$APP_NAME" --radiolist \
+            "Monitor scale. A fractional scale can make Electron/Chromium/Firefox chrome render oversized (their toolkits round it up); 'auto' keeps the fractional scale and fixes that via XWayland instead of resizing the whole UI." \
+            17 78 3 \
+            auto "Keep fractional scale + XWayland fix (recommended)" ON \
+            1    "Force integer scale 1 (smaller UI everywhere)" OFF \
+            2    "Force integer scale 2 (larger UI everywhere)" OFF \
+            3>&1 1>&2 2>&3) || { warn "Cancelled."; exit 0; }
+    fi
+
+    local summary="About to run, with backups (if needed) under:\n$BACKUP_ROOT/$STAMP\n\n"
+    (( DO_PACKAGES )) && summary+="  - Install packages via dnf/COPR\n"
+    (( DO_SESSION_TWEAKS )) && summary+="  - Apply hyprland.conf tweaks (scale=$SCALE)\n"
+    (( DO_LINKS )) && summary+="  - Symlink configs into ~/.config\n"
+    (( DO_FONTS )) && summary+="  - Link fonts + refresh font cache\n"
+    summary+="\nProceed?"
+    whiptail --title "$APP_NAME" --yesno "$(printf '%b' "$summary")" 18 76 || { warn "Cancelled."; exit 0; }
+}
+
+run_tui_install() {
+    TUI_ACTIVE=1
+    if (( DO_PACKAGES )); then
+        log "Requesting sudo access (needed for package installation)..."
+        sudo -v || die "sudo access is required to install packages"
+        ( while true; do sleep 60; sudo -n true || exit; done ) &
+        SUDO_KEEPALIVE_PID=$!
+    fi
+
+    {
+        echo 5; echo XXX; echo "Preparing..."; echo XXX
+        if (( DO_PACKAGES )); then
+            echo 15; echo XXX; echo "Installing packages via dnf (this can take a few minutes)..."; echo XXX
+            install_packages
+        fi
+        if (( DO_SESSION_TWEAKS )); then
+            echo 60; echo XXX; echo "Applying Hyprland session tweaks..."; echo XXX
+            apply_hyprland_tweaks
+        fi
+        if (( DO_LINKS )); then
+            echo 75; echo XXX; echo "Linking configuration files..."; echo XXX
+            link_configs
+        fi
+        if (( DO_FONTS )); then
+            echo 88; echo XXX; echo "Installing fonts..."; echo XXX
+            install_fonts
+        fi
+        echo 96; echo XXX; echo "Reloading Hyprland (if running)..."; echo XXX
+        reload_hyprland
+        echo 100
+    } | whiptail --title "$APP_NAME" --gauge "Installing $APP_NAME..." 10 74 0
+
+    if [[ -n $SUDO_KEEPALIVE_PID ]]; then
+        kill "$SUDO_KEEPALIVE_PID" 2>/dev/null
+        SUDO_KEEPALIVE_PID=''
+    fi
+    TUI_ACTIVE=0
+
+    whiptail --title "$APP_NAME" --msgbox \
+"Installation complete.
+
+Next steps:
+  1. Log out and choose \"Hyprland\" at the login screen if you're not
+     already in it (a fresh login is needed to fully apply scale/XWayland
+     env vars, not just a config reload).
+  2. Fully restart any open Electron/Chromium/Firefox windows.
+
+Full log: $LOG_FILE" 16 76
+}
+
+# Zenity-based graphical fallback for people who'd rather click than use the
+# terminal TUI. Kept intentionally simple relative to the TUI wizard.
 gui_choices() {
     local picked
     picked=$(zenity --list --checklist --title="$APP_NAME" \
         --text='Choose installation components. Plasma and your display manager are not modified.' \
         --column='Install' --column='Component' --column='Purpose' \
-        TRUE 'Packages' 'Hyprland, Noctalia, portal, Kitty, Zenity' \
+        TRUE 'Packages' 'Hyprland, Noctalia, portal, Kitty, dependencies' \
         TRUE 'Configuration' 'Symlink Hyprland, Noctalia and Kitty configuration' \
         TRUE 'Fonts' 'Link IosevkaTerm Nerd Font Mono and refresh cache' \
-        TRUE 'Tweaks' 'Scale 1, natural touchpad scroll, workspaces 1-10' \
+        TRUE 'Tweaks' 'Scale fix, natural touchpad scroll, workspaces 1-10' \
         --separator='|' --width=760 --height=360) || exit 0
     DO_PACKAGES=0; DO_LINKS=0; DO_FONTS=0; DO_SESSION_TWEAKS=0
     [[ $picked == *Packages* ]] && DO_PACKAGES=1
@@ -254,16 +407,31 @@ gui_choices() {
         --text="Proceed with the selected setup? Existing config paths will be backed up under:\n$BACKUP_ROOT/$STAMP" || exit 0
 }
 
+# Last-resort interactive fallback when whiptail can't be installed (e.g. no
+# network) and --gui wasn't requested. Only asks the one choice that most
+# affects visual results; everything else keeps its flag/default value.
+fallback_prompts() {
+    warn "whiptail is unavailable; falling back to plain terminal prompts."
+    printf '\n%s\n%s\n' "$APP_NAME" 'This installs a separate Hyprland session and preserves Plasma.'
+    read -r -p 'Monitor scale: auto (default; keeps fractional scale + XWayland fix) or integer 1/2? [auto]: ' answer
+    SCALE=${answer:-auto}
+}
+
+# ---------------------------------------------------------------------------
+
 while (($#)); do
     case $1 in
-        --gui) USE_GUI=1 ;;
-        --scale) shift; SCALE=${1:-} ;;
-        --no-packages) DO_PACKAGES=0 ;;
-        --no-links) DO_LINKS=0 ;;
-        --no-fonts) DO_FONTS=0 ;;
-        --no-tweaks) DO_SESSION_TWEAKS=0 ;;
+        --tui) UI_MODE="tui" ;;
+        --gui) UI_MODE="gui" ;;
+        --batch|--yes) ASSUME_YES=1 ;;
+        --scale) shift; SCALE=${1:-}; EXPLICIT_FLAGS=1 ;;
+        --no-packages) DO_PACKAGES=0; EXPLICIT_FLAGS=1 ;;
+        --no-links) DO_LINKS=0; EXPLICIT_FLAGS=1 ;;
+        --no-fonts) DO_FONTS=0; EXPLICIT_FLAGS=1 ;;
+        --no-tweaks) DO_SESSION_TWEAKS=0; EXPLICIT_FLAGS=1 ;;
+        --log-file) shift; LOG_FILE=${1:-$LOG_FILE} ;;
         --help|-h) usage; exit 0 ;;
-        *) die "Unknown option: $1" ;;
+        *) die "Unknown option: $1 (see --help)" ;;
     esac
     shift
 done
@@ -271,27 +439,55 @@ done
 [[ $SCALE == auto || $SCALE =~ ^[123]$ ]] || die "--scale must be 'auto' or an integer 1, 2, or 3"
 require_repo_layout
 is_fedora || die "Unsupported distribution. This installer is designed and tested for Fedora."
+mkdir -p "$(dirname -- "$LOG_FILE")"
+: >"$LOG_FILE"
 
-# If GUI was requested but Zenity is not installed yet, package installation will
-# install it. Fall back gracefully for this first run rather than installing UI
-# tooling before the user has approved package installation.
-if (( USE_GUI )) && have zenity; then
-    gui_choices
-elif (( USE_GUI )); then
-    warn 'Zenity is not installed yet; using the terminal for this first run.'
-    terminal_choices
+# Decide the UI mode if not forced by --tui/--gui: prefer the TUI wizard when
+# running interactively with no scripting flags already given; otherwise run
+# straight through with whatever flags/defaults were provided.
+if [[ -z $UI_MODE ]]; then
+    if (( ASSUME_YES )) || (( EXPLICIT_FLAGS )) || [[ ! -t 0 || ! -t 1 ]]; then
+        UI_MODE="batch"
+    else
+        UI_MODE="tui"
+    fi
 fi
 
 log "$APP_NAME — repository: $REPO_DIR"
 log "No Plasma packages, display-manager settings, or Firefox profiles are modified."
-(( DO_PACKAGES )) && install_packages
-(( DO_SESSION_TWEAKS )) && apply_hyprland_tweaks
-(( DO_LINKS )) && link_configs
-(( DO_FONTS )) && install_fonts
-reload_hyprland
+log "Full log: $LOG_FILE"
 
-ok 'Installation complete.'
-printf '\nNext steps:\n'
-printf '%s\n' '  1. Log out and choose “Hyprland” in your display manager if you are not already in it.'
-printf '%s\n' '  2. Fully restart Chromium/Electron/Firefox applications after changing scale.'
-printf '%s\n' "  3. Backups (only if an existing path was replaced): $BACKUP_ROOT/$STAMP"
+case $UI_MODE in
+    gui)
+        have zenity || { warn 'Zenity is not installed yet; installing it first.'; sudo dnf install -y zenity || die "Could not install zenity"; }
+        gui_choices
+        run_tui_install
+        ;;
+    tui)
+        if ensure_whiptail; then
+            tui_choices
+            run_tui_install
+        else
+            warn "Could not obtain whiptail; continuing with plain prompts."
+            fallback_prompts
+            (( DO_PACKAGES )) && install_packages
+            (( DO_SESSION_TWEAKS )) && apply_hyprland_tweaks
+            (( DO_LINKS )) && link_configs
+            (( DO_FONTS )) && install_fonts
+            reload_hyprland
+            ok "Installation complete. Full log: $LOG_FILE"
+        fi
+        ;;
+    batch)
+        (( DO_PACKAGES )) && install_packages
+        (( DO_SESSION_TWEAKS )) && apply_hyprland_tweaks
+        (( DO_LINKS )) && link_configs
+        (( DO_FONTS )) && install_fonts
+        reload_hyprland
+        ok "Installation complete. Full log: $LOG_FILE"
+        printf '\nNext steps:\n'
+        printf '%s\n' '  1. Log out and choose "Hyprland" in your display manager if you are not already in it.'
+        printf '%s\n' '  2. Fully restart Chromium/Electron/Firefox applications after this run (env vars need a fresh session).'
+        printf '%s\n' "  3. Backups (only if an existing path was replaced): $BACKUP_ROOT/$STAMP"
+        ;;
+esac
