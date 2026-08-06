@@ -21,7 +21,7 @@ A Fedora-focused Hyprland + Noctalia setup with a flat Gruvbox aesthetic, built 
 ## Install
 
 ```bash
-git clone <your-fork-or-repo-url> ~/rice/gruvbox-console-hypr
+git clone https://github.com/SEOJIAF/gruvbox-console-hypr
 cd ~/rice/gruvbox-console-hypr
 ./install.sh
 ```
