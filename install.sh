@@ -28,6 +28,7 @@ DO_LINKS=1
 DO_FONTS=1
 DO_SESSION_TWEAKS=1
 SUDO_KEEPALIVE_PID=''
+TRACE=0
 
 log()  { printf '\033[1;33m==>\033[0m %s\n' "$*" | tee -a "$LOG_FILE" >&2; }
 ok()   { printf '\033[1;32m OK\033[0m %s\n' "$*" | tee -a "$LOG_FILE" >&2; }
@@ -66,6 +67,7 @@ Options:
   --tui              Force the terminal TUI wizard (whiptail)
   --gui              Force Zenity graphical dialogs instead of the TUI
   --batch, --yes     Skip all prompts; run with current flag values
+  -x, --trace        Enable bash xtrace debugging output
   --scale SCALE      Monitor scale: 'auto' (default) or integer 1/2/3. Auto
                      keeps the fractional scale and fixes oversized Chromium/
                      Electron/Firefox chrome via the XWayland force_zero_scaling
@@ -127,15 +129,24 @@ is_fedora() {
 }
 
 install_packages() {
+    local repoquery_rc
     have dnf || die "dnf is required; this installer currently supports Fedora only."
 
     # The Hyprland COPR used by this rice also provides Noctalia/Noctalia QS.
     # Do not enable it if the requested package is already available.
-    if ! dnf -q repoquery --available hyprland >/dev/null 2>&1; then
+    # This can block on metadata/mirror issues, so time it out and proceed.
+    log "Checking whether hyprland is already available in enabled repos (timeout: 120s)"
+    if run_step timeout 120 dnf -q repoquery --available hyprland; then
+        ok "A Hyprland package source is already enabled"
+    else
+        repoquery_rc=$?
+        if [[ $repoquery_rc -eq 124 ]]; then
+            warn "Repo availability probe timed out; enabling COPR directly to continue."
+        else
+            warn "hyprland not found in currently enabled repos; enabling COPR."
+        fi
         log "Enabling COPR lionheartp/Hyprland"
         run_step sudo dnf -y copr enable lionheartp/Hyprland
-    else
-        ok "A Hyprland package source is already enabled"
     fi
 
     log "Installing Hyprland, portal integration, Noctalia, theming tools, and helpers"
@@ -439,6 +450,7 @@ while (($#)); do
         --tui) UI_MODE="tui" ;;
         --gui) UI_MODE="gui" ;;
         --batch|--yes) ASSUME_YES=1 ;;
+        -x|--trace) TRACE=1 ;;
         --scale) shift; SCALE=${1:-}; EXPLICIT_FLAGS=1 ;;
         --no-packages) DO_PACKAGES=0; EXPLICIT_FLAGS=1 ;;
         --no-links) DO_LINKS=0; EXPLICIT_FLAGS=1 ;;
@@ -456,6 +468,7 @@ require_repo_layout
 is_fedora || die "Unsupported distribution. This installer is designed and tested for Fedora."
 mkdir -p "$(dirname -- "$LOG_FILE")"
 : >"$LOG_FILE"
+(( TRACE )) && set -x
 
 # Decide the UI mode if not forced by --tui/--gui: prefer the TUI wizard when
 # running interactively with no scripting flags already given; otherwise run
