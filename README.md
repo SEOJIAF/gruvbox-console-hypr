@@ -2,6 +2,8 @@
 
 A Fedora-focused Hyprland + Noctalia setup with a flat Gruvbox aesthetic, built to run **alongside KDE Plasma** as a separate login session.
 
+> **AI assistance note:** Parts of this project (especially installer debugging/refinement) were developed with AI assistant help. All changes were reviewed and tested by yours truly before publishing.
+
 ## Highlights
 
 - Hyprland session with Noctalia shell (`qs -c noctalia-shell`)
