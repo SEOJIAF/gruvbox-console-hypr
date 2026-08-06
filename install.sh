@@ -20,7 +20,6 @@ STAMP="$(date +%Y%m%d-%H%M%S)"
 LOG_FILE="${TMPDIR:-/tmp}/gruvbox-console-hypr-install-$STAMP.log"
 
 UI_MODE=''          # tui | gui | batch — decided after argument parsing
-TUI_ACTIVE=0         # 1 while a whiptail --gauge owns the terminal
 EXPLICIT_FLAGS=0     # set when a granular --no-* / --scale flag is passed
 ASSUME_YES=0
 SCALE='auto'
@@ -35,15 +34,12 @@ ok()   { printf '\033[1;32m OK\033[0m %s\n' "$*" | tee -a "$LOG_FILE" >&2; }
 warn() { printf '\033[1;31mWARN\033[0m %s\n' "$*" | tee -a "$LOG_FILE" >&2; }
 die()  { warn "$*"; exit 1; }
 
-# Run a command, always capturing full output to $LOG_FILE. Streams it live to
-# the terminal too, unless a whiptail gauge currently owns the screen.
+# Run a command, streaming its real output live to the terminal (so slow
+# steps like "dnf install" show actual progress instead of looking frozen)
+# while also capturing everything to $LOG_FILE.
 run_step() {
     printf '\n[%s] $ %s\n' "$(date +%H:%M:%S)" "$*" >>"$LOG_FILE"
-    if (( TUI_ACTIVE )); then
-        "$@" >>"$LOG_FILE" 2>&1
-    else
-        "$@" 2>&1 | tee -a "$LOG_FILE"
-    fi
+    "$@" 2>&1 | tee -a "$LOG_FILE"
 }
 
 cleanup() {
@@ -91,6 +87,9 @@ require_repo_layout() {
     [[ -f "$REPO_DIR/hypr/hyprland.conf" ]] || die "Missing hypr/hyprland.conf beside install.sh"
     [[ -d "$REPO_DIR/noctalia" ]] || die "Missing noctalia/ beside install.sh"
     [[ -d "$REPO_DIR/kitty" ]] || die "Missing kitty/ beside install.sh"
+    [[ -d "$REPO_DIR/gtk-3.0" ]] || die "Missing gtk-3.0/ beside install.sh"
+    [[ -d "$REPO_DIR/gtk-4.0" ]] || die "Missing gtk-4.0/ beside install.sh"
+    [[ -d "$REPO_DIR/qt6ct" ]] || die "Missing qt6ct/ beside install.sh"
 }
 
 have() { command -v "$1" >/dev/null 2>&1; }
@@ -123,6 +122,7 @@ link_path() {
 }
 
 is_fedora() {
+    # shellcheck disable=SC1091
     [[ -r /etc/os-release ]] && . /etc/os-release && [[ ${ID:-} == fedora ]]
 }
 
@@ -138,11 +138,12 @@ install_packages() {
         ok "A Hyprland package source is already enabled"
     fi
 
-    log "Installing Hyprland, portal integration, Noctalia, Kitty, and helpers"
+    log "Installing Hyprland, portal integration, Noctalia, theming tools, and helpers"
     run_step sudo dnf install -y \
         hyprland \
         xdg-desktop-portal-hyprland \
         qt5-qtwayland \
+        qt6ct \
         noctalia-shell \
         kitty \
         newt \
@@ -169,7 +170,8 @@ apply_hyprland_tweaks() {
         { print }
         END { if (!changed) print "monitor=,preferred,auto," scale }
     ' "$conf" >"$tmp"
-    mv -- "$tmp" "$conf"
+    cat "$tmp" >"$conf"
+    rm -f -- "$tmp"
 
     # Chromium/Electron/Firefox round a fractional monitor scale up to the next
     # integer for their own chrome and render oversized. Forcing them onto XWayland
@@ -204,7 +206,8 @@ EOF
             /^[[:space:]]*touchpad[[:space:]]*\{/ && !done { print; print "        natural_scroll = true"; done=1; next }
             { print }
         ' "$conf" >"$tmp"
-        mv -- "$tmp" "$conf"
+        cat "$tmp" >"$conf"
+        rm -f -- "$tmp"
     fi
 
     # Add bindings 5-10 only if an older Phase-1 config did not include them.
@@ -243,6 +246,9 @@ link_configs() {
     link_path "$REPO_DIR/hypr/hyprland.conf" "$CONFIG_DIR/hypr/hyprland.conf"
     link_path "$REPO_DIR/noctalia" "$CONFIG_DIR/noctalia"
     link_path "$REPO_DIR/kitty" "$CONFIG_DIR/kitty"
+    link_path "$REPO_DIR/gtk-3.0" "$CONFIG_DIR/gtk-3.0"
+    link_path "$REPO_DIR/gtk-4.0" "$CONFIG_DIR/gtk-4.0"
+    link_path "$REPO_DIR/qt6ct" "$CONFIG_DIR/qt6ct"
 }
 
 install_fonts() {
@@ -331,45 +337,53 @@ Press Enter to continue." 16 76
     whiptail --title "$APP_NAME" --yesno "$(printf '%b' "$summary")" 18 76 || { warn "Cancelled."; exit 0; }
 }
 
-run_tui_install() {
-    TUI_ACTIVE=1
+# Runs the chosen steps with real, live output (not hidden behind a gauge —
+# "dnf install" alone can take minutes, and a gauge with no new progress to
+# report during that time just looks frozen). A short whiptail/zenity dialog
+# announces each step so it's still obvious what's about to produce output.
+run_install() {
+    local total=0 step=0
+    for flag in DO_PACKAGES DO_SESSION_TWEAKS DO_LINKS DO_FONTS; do
+        [[ ${!flag} == 1 ]] && ((++total))
+    done
+    ((++total)) # reload_hyprland always runs
+
+    announce_step() {
+        step=$((step + 1))
+        log "Step $step/$total: $1"
+    }
+
     if (( DO_PACKAGES )); then
         log "Requesting sudo access (needed for package installation)..."
         sudo -v || die "sudo access is required to install packages"
         ( while true; do sleep 60; sudo -n true || exit; done ) &
         SUDO_KEEPALIVE_PID=$!
+        announce_step "installing packages via dnf — this can take a few minutes, real dnf output follows below"
+        install_packages
     fi
-
-    {
-        echo 5; echo XXX; echo "Preparing..."; echo XXX
-        if (( DO_PACKAGES )); then
-            echo 15; echo XXX; echo "Installing packages via dnf (this can take a few minutes)..."; echo XXX
-            install_packages
-        fi
-        if (( DO_SESSION_TWEAKS )); then
-            echo 60; echo XXX; echo "Applying Hyprland session tweaks..."; echo XXX
-            apply_hyprland_tweaks
-        fi
-        if (( DO_LINKS )); then
-            echo 75; echo XXX; echo "Linking configuration files..."; echo XXX
-            link_configs
-        fi
-        if (( DO_FONTS )); then
-            echo 88; echo XXX; echo "Installing fonts..."; echo XXX
-            install_fonts
-        fi
-        echo 96; echo XXX; echo "Reloading Hyprland (if running)..."; echo XXX
-        reload_hyprland
-        echo 100
-    } | whiptail --title "$APP_NAME" --gauge "Installing $APP_NAME..." 10 74 0
+    if (( DO_SESSION_TWEAKS )); then
+        announce_step "applying Hyprland session tweaks (scale=$SCALE, touchpad, workspaces, launcher keybind)"
+        apply_hyprland_tweaks
+    fi
+    if (( DO_LINKS )); then
+        announce_step "linking configuration files into $CONFIG_DIR"
+        link_configs
+    fi
+    if (( DO_FONTS )); then
+        announce_step "installing fonts into $DATA_DIR/fonts"
+        install_fonts
+    fi
+    announce_step "reloading Hyprland (if currently running)"
+    reload_hyprland
 
     if [[ -n $SUDO_KEEPALIVE_PID ]]; then
         kill "$SUDO_KEEPALIVE_PID" 2>/dev/null
         SUDO_KEEPALIVE_PID=''
     fi
-    TUI_ACTIVE=0
 
-    whiptail --title "$APP_NAME" --msgbox \
+    ok "Installation complete. Full log: $LOG_FILE"
+    if have whiptail && [[ -t 0 && -t 1 ]]; then
+        whiptail --title "$APP_NAME" --msgbox \
 "Installation complete.
 
 Next steps:
@@ -379,6 +393,7 @@ Next steps:
   2. Fully restart any open Electron/Chromium/Firefox windows.
 
 Full log: $LOG_FILE" 16 76
+    fi
 }
 
 # Zenity-based graphical fallback for people who'd rather click than use the
@@ -461,30 +476,19 @@ case $UI_MODE in
     gui)
         have zenity || { warn 'Zenity is not installed yet; installing it first.'; sudo dnf install -y zenity || die "Could not install zenity"; }
         gui_choices
-        run_tui_install
+        run_install
         ;;
     tui)
         if ensure_whiptail; then
             tui_choices
-            run_tui_install
         else
             warn "Could not obtain whiptail; continuing with plain prompts."
             fallback_prompts
-            (( DO_PACKAGES )) && install_packages
-            (( DO_SESSION_TWEAKS )) && apply_hyprland_tweaks
-            (( DO_LINKS )) && link_configs
-            (( DO_FONTS )) && install_fonts
-            reload_hyprland
-            ok "Installation complete. Full log: $LOG_FILE"
         fi
+        run_install
         ;;
     batch)
-        (( DO_PACKAGES )) && install_packages
-        (( DO_SESSION_TWEAKS )) && apply_hyprland_tweaks
-        (( DO_LINKS )) && link_configs
-        (( DO_FONTS )) && install_fonts
-        reload_hyprland
-        ok "Installation complete. Full log: $LOG_FILE"
+        run_install
         printf '\nNext steps:\n'
         printf '%s\n' '  1. Log out and choose "Hyprland" in your display manager if you are not already in it.'
         printf '%s\n' '  2. Fully restart Chromium/Electron/Firefox applications after this run (env vars need a fresh session).'

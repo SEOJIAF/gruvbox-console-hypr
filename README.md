@@ -10,7 +10,7 @@ state).
 
 Phase 3 done (Gruvbox palette + monospace typography), plus a real
 `install.sh` and a round of ergonomics fixes (see below). Remaining:
-GTK/Qt/cursor coherence, wallpaper, final docs.
+wallpaper and final docs.
 
 - `hypr/` — Hyprland config
 - `noctalia/` — Noctalia shell config (`~/.config/noctalia`)
@@ -22,11 +22,12 @@ GTK/Qt/cursor coherence, wallpaper, final docs.
 - `install.sh` — idempotent Fedora installer with a **terminal TUI wizard**
   (whiptail) as the default when run interactively: welcome screen →
   checklist of components → monitor-scale choice → confirmation → a
-  progress gauge that runs everything, full log kept in `/tmp`. Enables the
+  step-by-step install run with **live command output** and clear step logging;
+  full log is always kept in `/tmp`. Enables the
   COPR if needed, installs packages via `dnf`, symlinks configs with
   timestamped backups of anything pre-existing, links fonts + refreshes
-  fontconfig, and applies the session tweaks below to a fresh clone's
-  `hypr/hyprland.conf`. `--gui` swaps the TUI for Zenity dialogs; any of
+  fontconfig, links GTK/Qt theme config, and applies the session tweaks below
+  to a fresh clone's `hypr/hyprland.conf`. `--gui` swaps the TUI for Zenity dialogs; any of
   `--scale auto|1|2|3` / `--no-packages` / `--no-links` / `--no-fonts` /
   `--no-tweaks` / `--batch` skips the wizard and runs non-interactively.
   Never touches Plasma packages, the display manager, or Firefox's profile.
@@ -129,6 +130,19 @@ GTK/Qt/cursor coherence, wallpaper, final docs.
   `hypr/hyprland.conf`.
 - **Noctalia app launcher keybind:** `SUPER, R` → `qs ipc -c noctalia-shell
   call launcher toggle`.
+
+## GTK/Qt coherence (Phase 4, theming fix)
+
+- **Dolphin/Qt apps defaulting to light theme:** fixed by adding
+  `env = QT_QPA_PLATFORMTHEME,qt6ct` and `env = QT_STYLE_OVERRIDE,Breeze`
+  in `hypr/hyprland.conf`, plus a tracked `qt6ct/qt6ct.conf` that sets
+  `BreezeDark.colors` and `Breeze` style.
+- **GTK app dark preference/cursor coherence:** added `gtk-3.0/settings.ini`
+  and `gtk-4.0/settings.ini` with `Adwaita-dark`, dark preference enabled,
+  and cursor/font defaults aligned with the session.
+- **Installer coverage:** `install.sh` now installs `qt6ct` and symlinks
+  `gtk-3.0/`, `gtk-4.0/`, and `qt6ct/` into `~/.config`, so a fresh clone
+  reproduces the Dolphin dark-theme fix.
 
 ## Prerequisites
 
