@@ -129,25 +129,12 @@ is_fedora() {
 }
 
 install_packages() {
-    local repoquery_rc
     have dnf || die "dnf is required; this installer currently supports Fedora only."
 
-    # The Hyprland COPR used by this rice also provides Noctalia/Noctalia QS.
-    # Do not enable it if the requested package is already available.
-    # This can block on metadata/mirror issues, so time it out and proceed.
-    log "Checking whether hyprland is already available in enabled repos (timeout: 120s)"
-    if run_step timeout 120 dnf -q repoquery --available hyprland; then
-        ok "A Hyprland package source is already enabled"
-    else
-        repoquery_rc=$?
-        if [[ $repoquery_rc -eq 124 ]]; then
-            warn "Repo availability probe timed out; enabling COPR directly to continue."
-        else
-            warn "hyprland not found in currently enabled repos; enabling COPR."
-        fi
-        log "Enabling COPR lionheartp/Hyprland"
-        run_step sudo dnf -y copr enable lionheartp/Hyprland
-    fi
+    # Always enable the Hyprland COPR. This is idempotent and avoids repoquery
+    # probes that may block on slow/problematic third-party metadata refreshes.
+    log "Ensuring COPR lionheartp/Hyprland is enabled"
+    run_step sudo dnf -y copr enable lionheartp/Hyprland
 
     log "Installing Hyprland, portal integration, Noctalia, theming tools, and helpers"
     run_step sudo dnf install -y \
