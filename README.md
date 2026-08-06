@@ -8,9 +8,9 @@ state).
 
 ## Status
 
-Phase 3 done: Gruvbox palette + monospace console typography applied across
-Hyprland, Noctalia, and the terminal. Remaining phases: GTK/Qt/cursor
-coherence, wallpaper, install.sh, final docs.
+Phase 3 done (Gruvbox palette + monospace typography), plus a real
+`install.sh` and a round of ergonomics fixes (see below). Remaining:
+GTK/Qt/cursor coherence, wallpaper, final docs.
 
 - `hypr/` — Hyprland config
 - `noctalia/` — Noctalia shell config (`~/.config/noctalia`)
@@ -19,7 +19,13 @@ coherence, wallpaper, install.sh, final docs.
 - `fontconfig/`, `fonts/` — monospace console fonts
 - `wallpaper/` — flat Gruvbox wallpaper
 - `applications/` — Hyprland session `.desktop` entry (if not already provided by the package)
-- `install.sh` — idempotent installer, packages via `dnf`/COPR, symlinks configs, never touches Plasma or the display manager's enabled state
+- `install.sh` — idempotent Fedora installer: enables the COPR if needed,
+  installs packages via `dnf`, symlinks configs with timestamped backups of
+  anything pre-existing, links fonts + refreshes fontconfig, and applies the
+  session tweaks below to a fresh clone's `hypr/hyprland.conf`. Supports
+  `--gui` (Zenity dialogs), `--scale auto|1|2|3`, and `--no-packages`/
+  `--no-links`/`--no-fonts`/`--no-tweaks` to skip steps. Never touches
+  Plasma packages, the display manager, or Firefox's profile.
 
 ## Packages / COPRs installed so far
 
@@ -86,6 +92,38 @@ coherence, wallpaper, install.sh, final docs.
   kitty config, saved as `kitty/gruvbox-dark.conf` and included from
   `kitty/kitty.conf`, which also sets the Iosevka Term Mono font family and
   a block cursor.
+
+## Ergonomics fixes (post-Phase-3)
+
+- **Kitty bold/italic text rendering broken:** `bold_font`/`italic_font` in
+  `kitty/kitty.conf` were set to literal strings like `IosevkaTerm Nerd Font
+  Mono Bold` — that's a style, not a font family name, so `fc-match` silently
+  fell back to **Noto Sans** (a proportional font) for any bolded text. Since
+  `ls --color` bolds directory names, this broke the monospace grid on
+  practically every directory listing. Fixed by setting all three to `auto`,
+  kitty's documented default that lets it resolve styles from `font_family`
+  correctly. Also dropped `font_size` 11→10.
+- **More workspaces:** Hyprland itself has no workspace limit — Phase 1's
+  minimal config only bound keys for 1-4. Added `SUPER`/`SUPER SHIFT` + `1-9`
+  and `0` (→ workspace 10) in `hypr/hyprland.conf`.
+- **Oversized Electron/Chromium/Firefox chrome:** this panel's monitor scale
+  is a fractional `1.5` (`hyprctl monitors`). Toolkits without full
+  fractional-scale support (GTK, Chromium/Electron) round that up to `2` for
+  their own window chrome while page/app content correctly renders at `1.5`
+  — hence oversized toolbars/tabs/menus with normal-looking content.
+  Quickshell/Noctalia isn't affected (proper fractional-scale support), so
+  the monitor scale itself was kept at `auto` (1.5). Fixed instead with:
+  `xwayland { force_zero_scaling = true }` (Hyprland upscales XWayland
+  clients from a scale-1 render, avoiding the rounding entirely) plus
+  `env = MOZ_ENABLE_WAYLAND,0` and `env = ELECTRON_OZONE_PLATFORM_HINT,x11`
+  to push Firefox and Electron apps onto XWayland. `env` directives only
+  apply at Hyprland's own startup, not on `hyprctl reload` — a full
+  logout/login (or fresh session) is needed after this change, not just a
+  reload.
+- **Touchpad scroll direction:** `input.touchpad.natural_scroll = true` in
+  `hypr/hyprland.conf`.
+- **Noctalia app launcher keybind:** `SUPER, R` → `qs ipc -c noctalia-shell
+  call launcher toggle`.
 
 ## Prerequisites
 

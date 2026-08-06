@@ -367,7 +367,7 @@
         "animationDisabled": false,
         "animationSpeed": 1,
         "autoStartAuth": false,
-        "avatarImage": "/home/carp/.face",
+        "avatarImage": "/home/carp/Pictures/Wallpapers/1817060.jpg",
         "boxRadiusRatio": 0,
         "clockFormat": "hh\\nmm",
         "clockStyle": "custom",
@@ -411,7 +411,7 @@
         "lockScreenMonitors": [
         ],
         "lockScreenTint": 0,
-        "passwordChars": false,
+        "passwordChars": true,
         "radiusRatio": 0,
         "reverseScroll": true,
         "scaleRatio": 1,
@@ -648,7 +648,7 @@
         "scrollbarAlwaysVisible": true,
         "settingsPanelMode": "attached",
         "settingsPanelSideBarCardStyle": false,
-        "tooltipsEnabled": true,
+        "tooltipsEnabled": false,
         "translucentWidgets": false
     },
     "wallpaper": {
