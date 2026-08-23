@@ -11,7 +11,7 @@ LOG_FILE="/tmp/hypr-install-$$.log"
 
 TUI_MODE=1
 DRY_RUN=0
-PHASES_SELECTED="1,2,3,4,5,6,7"
+PHASES_SELECTED="1,2,3,4,5,6,7,8"
 
 for arg in "$@"; do
     if [[ "$arg" == "--simple" ]]; then
@@ -115,7 +115,7 @@ if [[ $TUI_MODE -eq 1 ]]; then
     clear
     gum style --foreground "$C_PRIMARY" --border double --margin "1 2" --padding "0 2" "Gruvbox Console Hyprland"
     
-    OPTIONS=$(gum choose --no-limit --selected="1. Preflight Checks,2. Hyprland (ashbuk COPR),3. Noctalia Shell (v5),4. Gruvbox Dotfiles & Theme,5. Hyprland config wiring,6. Session integration,7. Final Verification" \
+    OPTIONS=$(gum choose --no-limit --selected="1. Preflight Checks,2. Hyprland (ashbuk COPR),3. Noctalia Shell (v5),4. Gruvbox Dotfiles & Theme,5. Hyprland config wiring,6. Session integration,7. Final Verification,8. Zsh & Oh-My-Zsh" \
         "1. Preflight Checks" \
         "2. Hyprland (ashbuk COPR)" \
         "3. Noctalia Shell (v5)" \
@@ -123,8 +123,8 @@ if [[ $TUI_MODE -eq 1 ]]; then
         "5. Hyprland config wiring" \
         "6. Session integration" \
         "7. Final Verification" \
+        "8. Zsh & Oh-My-Zsh" \
         "Enable Dry-Run Mode")
-
     if [[ -z "$OPTIONS" ]]; then
         die "No phases selected. Exiting."
     fi
@@ -135,7 +135,7 @@ if [[ $TUI_MODE -eq 1 ]]; then
     fi
 
     # Extract selected phase numbers
-    PHASES_SELECTED=$(echo "$OPTIONS" | grep -o '^[1-7]' | tr '\n' ',' | sed 's/,$//')
+    PHASES_SELECTED=$(echo "$OPTIONS" | grep -o '^[1-8]' | tr '\n' ',' | sed 's/,$//')
 fi
 
 function should_run() {
@@ -361,5 +361,52 @@ if should_run 7; then
         else 
             success "Verification passed! System is safely configured."
         fi
+    fi
+fi
+
+if should_run 8; then
+    info "=== Phase 8: Zsh & Oh-My-Zsh Setup ==="
+    if [[ $DRY_RUN -eq 1 ]]; then
+        info "[DRY RUN] Would install zsh, oh-my-zsh, plugins, and change default shell"
+    else
+        spin "Installing Zsh and util-linux-user..." sudo dnf install -y zsh util-linux-user git >/dev/null
+        
+        if [[ ! -d "$HOME/.oh-my-zsh" ]]; then
+            spin "Installing Oh-My-Zsh..." bash -c 'sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended >/dev/null 2>&1'
+            success "Oh-My-Zsh installed."
+        else
+            success "Oh-My-Zsh is already installed."
+        fi
+
+        spin "Installing Zsh plugins..." bash -c '
+            ZSH_CUSTOM="$HOME/.oh-my-zsh/custom"
+            if [[ ! -d "$ZSH_CUSTOM/plugins/zsh-autosuggestions" ]]; then
+                git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM}/plugins/zsh-autosuggestions >/dev/null 2>&1
+            fi
+            if [[ ! -d "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting" ]]; then
+                git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM}/plugins/zsh-syntax-highlighting >/dev/null 2>&1
+            fi
+        '
+        success "Zsh plugins installed."
+
+        spin "Configuring clean Gruvbox Zsh profile..." bash -c '
+            cat > "$HOME/.zshrc" << "END_ZSH"
+export ZSH="$HOME/.oh-my-zsh"
+
+# Minimal Gruvbox prompt (Line 1: ╭─user@host ~/dir | Line 2: ╰─❯)
+PROMPT="%F{#fabd2f}╭─%F{#83a598}%n%F{#ebdbb2}@%F{#d3869b}%m %F{#b8bb26}%~%f
+%F{#fabd2f}╰─%B%F{#fe8019}❯%f%b "
+
+plugins=(git zsh-autosuggestions zsh-syntax-highlighting)
+source $ZSH/oh-my-zsh.sh
+
+# Gruvbox styling for autosuggestions (soft gray/brown)
+ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=#928374"
+END_ZSH
+        '
+        success "Zsh profile deployed."
+        
+        spin "Changing default shell to Zsh..." sudo chsh -s /bin/zsh "$USER"
+        success "Default shell is now Zsh (requires logout to fully apply)."
     fi
 fi
