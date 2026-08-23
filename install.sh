@@ -372,7 +372,7 @@ if should_run 8; then
     if [[ $DRY_RUN -eq 1 ]]; then
         info "[DRY RUN] Would install zsh, oh-my-zsh, plugins, and change default shell"
     else
-        spin "Installing Zsh and util-linux-user..." sudo dnf install -y zsh util-linux-user git >/dev/null
+        spin "Installing Zsh and util-linux-user..." sudo dnf install -y zsh util-linux-user git zoxide lsd bat fzf >/dev/null
         
         if [[ ! -d "$HOME/.oh-my-zsh" ]]; then
             spin "Installing Oh-My-Zsh..." bash -c 'sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended >/dev/null 2>&1'
@@ -405,6 +405,16 @@ source $ZSH/oh-my-zsh.sh
 
 # Gruvbox styling for autosuggestions (soft gray/brown)
 ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=#928374"
+
+# Smart CLI tools & Aliases
+eval "$(zoxide init zsh)"
+alias cd="z"
+alias ls="lsd"
+alias ll="lsd -l"
+alias la="lsd -la"
+alias tree="lsd --tree"
+alias cat="bat"
+
 END_ZSH
         '
         success "Zsh profile deployed."
