@@ -250,6 +250,7 @@ if should_run 4; then
                     cp -R \"$SCRIPT_DIR/wallpaper/\"* \"$HOME/.local/share/backgrounds/\" 2>/dev/null || true
                 fi
                 if [[ -f \"$SCRIPT_DIR/noctalia-settings.toml\" ]]; then
+                    killall noctalia 2>/dev/null || true
                     mkdir -p \"$HOME/.local/state/noctalia\"
                     sed \"s|HOME_DIR|$HOME|g\" \"$SCRIPT_DIR/noctalia-settings.toml\" > \"$HOME/.local/state/noctalia/settings.toml\"
                 fi
