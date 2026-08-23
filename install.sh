@@ -234,27 +234,27 @@ if should_run 4; then
         info "[DRY RUN] Would deploy Gruvbox themes and configs from dotfiles/"
     else
         SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
-        if [[ -d "$SCRIPT_DIR/dotfiles" ]]; then
+        if [[ -d "$SCRIPT_DIR" ]]; then
         spin "Deploying Gruvbox dotfiles..." bash -c "
                 mkdir -p \"$HOME/.config\" \"$HOME/.local/share/fonts\" \"$HOME/.local/share/backgrounds\" \"$HOME/.config/hypr\"
                 for conf in fontconfig gtk-3.0 gtk-4.0 kitty qt6ct noctalia; do
-                    if [[ -d \"$SCRIPT_DIR/dotfiles/\$conf\" ]]; then
-                        cp -R \"$SCRIPT_DIR/dotfiles/\$conf\" \"$HOME/.config/\"
+                    if [[ -d \"$SCRIPT_DIR/\$conf\" ]]; then
+                        cp -R \"$SCRIPT_DIR/\$conf\" \"$HOME/.config/\"
                         echo \"dir:$HOME/.config/\$conf\" >> $MANIFEST_FILE
                     fi
                 done
-                if [[ -d \"$SCRIPT_DIR/dotfiles/fonts\" ]]; then
-                    cp -R \"$SCRIPT_DIR/dotfiles/fonts/\"* \"$HOME/.local/share/fonts/\" 2>/dev/null || true
+                if [[ -d \"$SCRIPT_DIR/fonts\" ]]; then
+                    cp -R \"$SCRIPT_DIR/fonts/\"* \"$HOME/.local/share/fonts/\" 2>/dev/null || true
                 fi
-                if [[ -d \"$SCRIPT_DIR/dotfiles/wallpaper\" ]]; then
-                    cp -R \"$SCRIPT_DIR/dotfiles/wallpaper/\"* \"$HOME/.local/share/backgrounds/\" 2>/dev/null || true
+                if [[ -d \"$SCRIPT_DIR/wallpaper\" ]]; then
+                    cp -R \"$SCRIPT_DIR/wallpaper/\"* \"$HOME/.local/share/backgrounds/\" 2>/dev/null || true
                 fi
-                if [[ -f \"$SCRIPT_DIR/dotfiles/noctalia-settings.toml\" ]]; then
+                if [[ -f \"$SCRIPT_DIR/noctalia-settings.toml\" ]]; then
                     mkdir -p \"$HOME/.local/state/noctalia\"
-                    sed \"s|HOME_DIR|$HOME|g\" \"$SCRIPT_DIR/dotfiles/noctalia-settings.toml\" > \"$HOME/.local/state/noctalia/settings.toml\"
+                    sed \"s|HOME_DIR|$HOME|g\" \"$SCRIPT_DIR/noctalia-settings.toml\" > \"$HOME/.local/state/noctalia/settings.toml\"
                 fi
-                if [[ -f \"$SCRIPT_DIR/dotfiles/hyprland.conf\" ]]; then
-                    cp \"$SCRIPT_DIR/dotfiles/hyprland.conf\" \"$HOME/.config/hypr/hyprland.conf\"
+                if [[ -f \"$SCRIPT_DIR/hypr/hyprland.conf\" ]]; then
+                    cp \"$SCRIPT_DIR/hypr/hyprland.conf\" \"$HOME/.config/hypr/hyprland.conf\"
                 fi
             "
             success "Dotfiles deployed."
