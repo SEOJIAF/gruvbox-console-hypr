@@ -278,6 +278,8 @@ if should_run 5; then
                 echo '# Minimal Hyprland config' > \"$HYPR_CONF\"
                 echo \"file:$HYPR_CONF\" >> $MANIFEST_FILE
             fi
+            sed -i '/# >>> noctalia-managed >>>/,/# <<< noctalia-managed <<</d' \"$HYPR_CONF\"
+            cat << 'END_CONF' >> \"$HYPR_CONF\"
 # >>> noctalia-managed >>>
 exec-once = noctalia
 
@@ -290,7 +292,7 @@ layerrule {
 }
 
 windowrule {
-    name = ^(dev\.noctalia\.Noctalia)$
+    name = ^(dev\\.noctalia\\.Noctalia)$
     float = 1
     size = 1080 920
 }
