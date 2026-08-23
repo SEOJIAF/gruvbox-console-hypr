@@ -25,7 +25,7 @@ git clone https://github.com/SEOJIAF/gruvbox-console-hypr
 cd gruvbox-console-hypr
 
 # Run the modern interactive installer:
-./install-v2-tui.sh
+./install.sh
 ```
 
 The installer will present an interactive `gum` checklist allowing you to run all phases or precisely select specific ones (like re-applying dotfiles).
@@ -34,19 +34,19 @@ The installer will present an interactive `gum` checklist allowing you to run al
 
 **Interactive TUI (Default)**
 ```bash
-./install-v2-tui.sh
+./install.sh
 ```
 
 **Simple Logging Mode (No Animations)**
 Falls back to standard `stdout` text logging, useful for scripting or if you don't want the visual TUI.
 ```bash
-./install-v2-tui.sh --simple
+./install.sh --simple
 ```
 
 **Dry-Run Mode**
 Safely tests the `dnf` transaction and configuration deployment without actually changing your system.
 ```bash
-./install-v2-tui.sh --dry-run
+./install.sh --dry-run
 ```
 
 ## What the installer does
@@ -75,14 +75,13 @@ This project is intentionally scoped to the Hyprland session and does **not**:
 ## Repository layout
 
 ```text
-dotfiles/
-  hypr/         Base Hyprland config
-  kitty/        Kitty terminal config (Gruvbox)
-  gtk-3.0/      GTK3 session defaults
-  gtk-4.0/      GTK4 session defaults
-  qt6ct/        Qt platform theming config
-  fonts/        IosevkaTerm Nerd Font Mono
-  wallpaper/    Gruvbox backgrounds
-  noctalia-settings.toml  Custom Noctalia v5 UI state
-install-v2-tui.sh   Modern animated installer
+hypr/         Base Hyprland config
+kitty/        Kitty terminal config (Gruvbox)
+gtk-3.0/      GTK3 session defaults
+gtk-4.0/      GTK4 session defaults
+qt6ct/        Qt platform theming config
+fonts/        IosevkaTerm Nerd Font Mono
+wallpaper/    Gruvbox backgrounds
+noctalia-settings.toml  Custom Noctalia v5 UI state
+install.sh   Modern animated installer
 ```
